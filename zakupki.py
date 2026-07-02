@@ -6,6 +6,12 @@ extendedsearch. Вёрстка ЕИС иногда меняется, поэто�
 возможно, придётся поправить при первом живом запуске.
 Если parse_cards() вернёт 0 карточек — запусти debug_dump() (см. ниже),
 посмотри реальный HTML и поправь селекторы (Claude Code сделает это за минуту).
+
+Если же запросы падают с ConnectTimeoutError (не доходит даже до HTML) —
+дело не в селекторах, а в блокировке по IP: zakupki.gov.ru не пускает
+запросы с зарубежных дата-центровых адресов (например, с GitHub Actions
+runners). В этом случае нужен proxy с российским IP — см. `proxy` в
+fetch()/search() и `zakupki_proxy` в config.yaml.
 """
 
 import time
@@ -44,9 +50,10 @@ def build_url(keyword: str, law: int, page: int) -> str:
     return SEARCH_URL + "?" + urlencode(params, encoding="utf-8")
 
 
-def fetch(keyword: str, law: int, page: int, timeout: int = 30) -> str:
+def fetch(keyword: str, law: int, page: int, timeout: int = 30, proxy: str | None = None) -> str:
     url = build_url(keyword, law, page)
-    r = requests.get(url, headers=HEADERS, timeout=timeout)
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    r = requests.get(url, headers=HEADERS, timeout=timeout, proxies=proxies)
     r.raise_for_status()
     return r.text
 
@@ -91,11 +98,11 @@ def parse_cards(html: str, law: int) -> list[dict]:
     return results
 
 
-def search(keyword: str, law: int, pages: int, pause: float = 1.0) -> list[dict]:
+def search(keyword: str, law: int, pages: int, pause: float = 1.0, proxy: str | None = None) -> list[dict]:
     out = []
     for page in range(1, pages + 1):
         try:
-            html = fetch(keyword, law, page)
+            html = fetch(keyword, law, page, proxy=proxy)
         except Exception as e:  # noqa: BLE001
             print(f"    [!] ошибка загрузки ({keyword}, {law}-ФЗ, стр.{page}): {e}")
             break
@@ -107,9 +114,9 @@ def search(keyword: str, law: int, pages: int, pause: float = 1.0) -> list[dict]
     return out
 
 
-def debug_dump(keyword: str = "плиты дорожные", law: int = 44, path: str = "debug_eis.html"):
+def debug_dump(keyword: str = "плиты дорожные", law: int = 44, path: str = "debug_eis.html", proxy: str | None = None):
     """Сохраняет сырой HTML первой страницы — чтобы свериться с реальными селекторами."""
-    html = fetch(keyword, law, 1)
+    html = fetch(keyword, law, 1, proxy=proxy)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Сохранил {path} ({len(html)} символов). Открой и проверь селекторы карточек.")

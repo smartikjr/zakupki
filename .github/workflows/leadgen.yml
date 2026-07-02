@@ -23,6 +23,7 @@ jobs:
       - name: Собрать лиды
         env:
           DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
+          ZAKUPKI_PROXY: ${{ secrets.ZAKUPKI_PROXY }}
         run: python leadgen.py
 
       # Вариант А: скачивать как артефакт запуска
@@ -39,5 +40,3 @@ jobs:
           git add leads.xlsx || true
           git commit -m "leads: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
           git push || true
-
-# force reindex 2026-07-02

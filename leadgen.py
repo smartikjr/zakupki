@@ -41,13 +41,18 @@ def main() -> None:
     if not token:
         print("[i] DADATA_TOKEN не задан — соберу лиды без обогащения (без ИНН/региона).")
 
+    proxy = (cfg.get("zakupki_proxy") or "").strip() or os.environ.get("ZAKUPKI_PROXY", "").strip()
+    if not proxy:
+        print("[i] ZAKUPKI_PROXY не задан — запросы к zakupki.gov.ru пойдут напрямую "
+              "(может не работать с GitHub Actions и других зарубежных IP).")
+
     # 1–3. Сбор + дедуп
     seen = set()
     raw_leads: list[dict] = []
     for law in cfg["laws"]:
         for kw in cfg["keywords"]:
             print(f"[>] {law}-ФЗ  «{kw}»")
-            for card in zakupki.search(kw, law, cfg.get("pages_per_keyword", 2)):
+            for card in zakupki.search(kw, law, cfg.get("pages_per_keyword", 2), proxy=proxy or None):
                 key = (card["reg_number"], card["law"]) if card["reg_number"] else (card["object"], card["law"])
                 if key in seen:
                     continue
