@@ -1,12 +1,9 @@
 name: Сбор лидов ЖБИ
 
-# Расписание (schedule) отключено: zakupki.gov.ru не пускает GitHub Actions
-# runners даже через прокси (см. README → «Прокси для zakupki.gov.ru»).
-# Основной сценарий — локальный запуск (README → «Запуск локально и
-# автоматизация»). Ручной запуск (workflow_dispatch) оставлен на случай,
-# если появится рабочий прокси/self-hosted runner.
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"   # каждые 6 часов (UTC)
+  workflow_dispatch:          # + кнопка ручного запуска
 
 permissions:
   contents: write             # чтобы коммитить leads.xlsx обратно в репозиторий
