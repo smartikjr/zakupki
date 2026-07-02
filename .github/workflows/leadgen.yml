@@ -1,0 +1,41 @@
+name: Сбор лидов ЖБИ
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # каждые 6 часов (UTC)
+  workflow_dispatch:          # + кнопка ручного запуска
+
+permissions:
+  contents: write             # чтобы коммитить leads.xlsx обратно в репозиторий
+
+jobs:
+  leadgen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Собрать лиды
+        env:
+          DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
+        run: python leadgen.py
+
+      # Вариант А: скачивать как артефакт запуска
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leads
+          path: leads.xlsx
+
+      # Вариант Б: класть свежий файл прямо в репозиторий (открывать откуда угодно)
+      - name: Закоммитить результат
+        run: |
+          git config user.name "leadgen-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add leads.xlsx || true
+          git commit -m "leads: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
+          git push || true
