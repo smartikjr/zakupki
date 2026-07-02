@@ -39,3 +39,5 @@ jobs:
           git add leads.xlsx || true
           git commit -m "leads: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
           git push || true
+
+# force reindex 2026-07-02
