@@ -33,7 +33,6 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 BASE = "https://www.fabrikant.ru"
-SEARCH_URL = BASE + "/procedure/search"
 
 
 def fetch(keyword: str, timeout: int = 30, proxy: str | None = None) -> str:
@@ -45,10 +44,15 @@ def fetch(keyword: str, timeout: int = 30, proxy: str | None = None) -> str:
         browser = p.chromium.launch(**launch_kwargs)
         try:
             page_obj = browser.new_page()
-            page_obj.goto(SEARCH_URL, timeout=timeout * 1000, wait_until="domcontentloaded")
+            # Заход сразу на /procedure/search не даёт #search появиться за
+            # 30с (проверено). Строка поиска подтверждённо есть на главной
+            # (SSR) — заходим туда, вводим запрос, жмём «Найти» и ждём
+            # перехода на страницу результатов.
+            page_obj.goto(BASE + "/", timeout=timeout * 1000, wait_until="domcontentloaded")
             page_obj.wait_for_selector("#search", timeout=timeout * 1000)
             page_obj.fill("#search", keyword)
-            page_obj.click('button[aria-label="Найти"]')
+            with page_obj.expect_navigation(timeout=timeout * 1000):
+                page_obj.click('button[aria-label="Найти"]')
             page_obj.wait_for_timeout(4000)
             html = page_obj.content()
         finally:
