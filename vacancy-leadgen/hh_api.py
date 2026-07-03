@@ -26,6 +26,10 @@ HEADERS = {
 def _get(path: str, params: dict | None = None, timeout: int = 30, proxy: str | None = None) -> dict:
     proxies = {"http": proxy, "https": proxy} if proxy else None
     r = requests.get(f"{BASE}{path}", headers=HEADERS, params=params, timeout=timeout, proxies=proxies)
+    if r.status_code >= 400:
+        # тело ответа hh.ru обычно объясняет причину (bad_argument,
+        # captcha_required и т.п.) — requests его не печатает по умолчанию
+        print(f"    [debug] {r.status_code} body: {r.text[:500]}")
     r.raise_for_status()
     return r.json()
 
