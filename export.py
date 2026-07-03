@@ -8,7 +8,9 @@ from openpyxl.utils import get_column_letter
 
 COLUMNS = [
     ("Дата загрузки", "loaded_at", 18),
+    ("Источник", "source", 14),
     ("Закон", "law", 8),
+    ("Тип", "deal_type", 12),
     ("Реестровый №", "reg_number", 22),
     ("Предмет закупки", "object", 55),
     ("Заказчик (из ЕИС)", "customer_name", 30),
@@ -21,7 +23,7 @@ COLUMNS = [
     ("НМЦК", "price", 18),
     ("Сроки", "dates", 28),
     ("Адрес", "address", 40),
-    ("Ссылка ЕИС", "link", 45),
+    ("Ссылка", "link", 45),
 ]
 
 
