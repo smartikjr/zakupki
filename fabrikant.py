@@ -3,26 +3,31 @@
 ещё одна коммерческая тендерная площадка (промышленность, стройка,
 энергетика), не завязанная на 44/223-ФЗ.
 
-СТАТУС: адрес поиска — /procedure/search (поле "query", страница —
-"page_number"), это подтверждено. Но сайт — Next.js SPA: список закупок
-приходит не обычным HTML, а потоком сериализованных React Server
-Components (не JSON, не DOM) — requests+BeautifulSoup в принципе не
-может это распарсить. Поэтому здесь Playwright — открываем страницу в
-headless Chromium, ждём, пока JS реально отрисует список, и парсим уже
-готовый DOM.
+СТАТУС: /procedure/search?query=...&page_number=... грузится (URL
+верный), но параметр query НЕ фильтрует результаты — сайт показывает
+общую ленту закупок независимо от него (проверено: искали «плиты
+дорожные», получили канцтовары и хозматериалы). Похоже, поиск
+запускается только реальным взаимодействием с формой, а не через
+URL-параметры. Поэтому здесь Playwright не просто грузит страницу, а
+эмулирует пользователя: открывает /procedure/search, вводит ключевое
+слово в поле #search и жмёт кнопку «Найти» (button[aria-label="Найти"]),
+затем ждёт и парсит DOM.
 
 Требует: `pip install playwright` и `playwright install --with-deps
 chromium` (уже добавлено в requirements.txt и .github/workflows).
 
-Селекторы карточек в parse_cards() — рабочая гипотеза, ещё не сверена
-с реальным отрендеренным DOM (нет возможности запустить браузер в среде
-разработки). Если вернёт 0 карточек — запусти debug_dump() (создаст
-debug_fabrikant.html из УЖЕ ОТРЕНДЕРЕННОГО DOM, не сырой HTML) и пришли
-файл — поправят за один заход, как и с остальными источниками.
+Пагинация (аргумент `page` в search()) пока НЕ реализована — форма
+пагинации тоже наверняка интерактивная (клик, не URL), это отдельная
+доработка. Сейчас всегда берём только первую страницу выдачи.
+
+Селекторы карточек в parse_cards() — рабочая гипотеза по структуре,
+которую видно после клика «Найти» на живом рендере (см. debug_dump()).
+Если после клика карточки всё равно не те/не найдены — пришли свежий
+debug_fabrikant.html, поправят за один заход.
 """
 
-import time
-from urllib.parse import urlencode, urljoin
+import re
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -31,14 +36,8 @@ BASE = "https://www.fabrikant.ru"
 SEARCH_URL = BASE + "/procedure/search"
 
 
-def build_url(keyword: str, page: int) -> str:
-    params = {"query": keyword, "page_number": page}
-    return SEARCH_URL + "?" + urlencode(params, encoding="utf-8")
-
-
-def fetch(keyword: str, page: int, timeout: int = 30, proxy: str | None = None) -> str:
-    """Открывает страницу в headless Chromium и возвращает DOM ПОСЛЕ рендера JS."""
-    url = build_url(keyword, page)
+def fetch(keyword: str, timeout: int = 30, proxy: str | None = None) -> str:
+    """Открывает поиск в headless Chromium, реально вводит запрос и жмёт «Найти»."""
     launch_kwargs = {}
     if proxy:
         launch_kwargs["proxy"] = {"server": proxy}
@@ -46,10 +45,10 @@ def fetch(keyword: str, page: int, timeout: int = 30, proxy: str | None = None) 
         browser = p.chromium.launch(**launch_kwargs)
         try:
             page_obj = browser.new_page()
-            # "networkidle" часто никогда не наступает на SPA с фоновой
-            # аналитикой/поллингом (таймаут почти гарантирован) — грузим
-            # до domcontentloaded и даём React время дорисовать список.
-            page_obj.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+            page_obj.goto(SEARCH_URL, timeout=timeout * 1000, wait_until="domcontentloaded")
+            page_obj.wait_for_selector("#search", timeout=timeout * 1000)
+            page_obj.fill("#search", keyword)
+            page_obj.click('button[aria-label="Найти"]')
             page_obj.wait_for_timeout(4000)
             html = page_obj.content()
         finally:
@@ -61,38 +60,53 @@ def _txt(node) -> str:
     return node.get_text(strip=True) if node else ""
 
 
+# Карточки не имеют стабильных классов (Tailwind, сгенерированные
+# имена) — вместо CSS-селекторов на конкретные классы берём ссылку на
+# процедуру и регуляркой разбираем текст ближайшего контейнера,
+# содержащего "Организатор" (устойчивый текстовый лейбл в разметке).
+_REG_RE = re.compile(r"№\s*(\d+)")
+_CUSTOMER_RE = re.compile(r"Организатор\s+(.+?)(?:\s+Дата публикации|\s+Цена|$)")
+_DATE_RE = re.compile(r"Дата публикации\s+([\d.]+\s+[\d:]+)")
+
+
 def parse_cards(html: str) -> list[dict]:
     """Разбирает отрендеренный DOM в список карточек-лидов."""
     soup = BeautifulSoup(html, "lxml")
-    cards = soup.select(
-        "a[href*='/procedure/view/'], div[data-testid*='procedure'], "
-        "div.trade-item, tr.trade-row, div.search-item"
-    )
     results = []
     seen_links = set()
-    for c in cards:
-        link_a = c if c.name == "a" else c.select_one("a[href*='/procedure/view/'], a")
-        link = urljoin(BASE, link_a["href"]) if (link_a and link_a.has_attr("href")) else ""
+    for link_a in soup.select("a[href*='/procedure/view/']"):
+        href = link_a.get("href", "")
+        link = urljoin(BASE, href)
         if not link or link in seen_links:
             continue
         seen_links.add(link)
 
-        obj = _txt(c.select_one(".trade-item__title, .search-item__title")) or _txt(link_a)
-        customer = _txt(c.select_one(".trade-item__customer, .search-item__customer, .company"))
-        price = _txt(c.select_one(".trade-item__price, .price"))
-        reg_number = _txt(c.select_one(".trade-item__number, .search-item__number"))
-        date_val = _txt(c.select_one(".trade-item__date, .search-item__date"))
-
-        if not (obj or reg_number):
+        obj = _txt(link_a)
+        if not obj:
             continue
+
+        container_text = ""
+        node = link_a
+        for _ in range(6):
+            node = node.parent
+            if node is None:
+                break
+            container_text = node.get_text(" ", strip=True)
+            if "Организатор" in container_text:
+                break
+
+        reg_m = _REG_RE.search(container_text)
+        cust_m = _CUSTOMER_RE.search(container_text)
+        date_m = _DATE_RE.search(container_text)
+
         results.append(
             {
                 "law": "",
-                "reg_number": reg_number,
+                "reg_number": reg_m.group(1) if reg_m else "",
                 "object": obj,
-                "customer_name": customer,
-                "price": price,
-                "dates": date_val,
+                "customer_name": cust_m.group(1).strip() if cust_m else "",
+                "price": "",
+                "dates": date_m.group(1) if date_m else "",
                 "link": link,
             }
         )
@@ -100,24 +114,19 @@ def parse_cards(html: str) -> list[dict]:
 
 
 def search(keyword: str, pages: int, pause: float = 1.0, proxy: str | None = None) -> list[dict]:
-    out = []
-    for page in range(1, pages + 1):
-        try:
-            html = fetch(keyword, page, proxy=proxy)
-        except Exception as e:  # noqa: BLE001
-            print(f"    [!] ошибка загрузки fabrikant ({keyword}, стр.{page}): {e}")
-            break
-        cards = parse_cards(html)
-        out.extend(cards)
-        if not cards:
-            break
-        time.sleep(pause)
-    return out
+    # Пагинация не реализована (см. докстринг модуля) — pages игнорируется,
+    # всегда только первая страница выдачи.
+    try:
+        html = fetch(keyword, proxy=proxy)
+    except Exception as e:  # noqa: BLE001
+        print(f"    [!] ошибка загрузки fabrikant ({keyword}): {e}")
+        return []
+    return parse_cards(html)
 
 
 def debug_dump(keyword: str = "плиты дорожные", path: str = "debug_fabrikant.html", proxy: str | None = None):
-    """Сохраняет ОТРЕНДЕРЕННЫЙ DOM первой страницы — чтобы свериться с реальными селекторами."""
-    html = fetch(keyword, 1, proxy=proxy)
+    """Сохраняет ОТРЕНДЕРЕННЫЙ DOM после поиска — чтобы свериться с реальными селекторами."""
+    html = fetch(keyword, proxy=proxy)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Сохранил {path} ({len(html)} символов). Открой и проверь селекторы карточек.")
