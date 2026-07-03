@@ -46,7 +46,11 @@ def fetch(keyword: str, page: int, timeout: int = 30, proxy: str | None = None) 
         browser = p.chromium.launch(**launch_kwargs)
         try:
             page_obj = browser.new_page()
-            page_obj.goto(url, timeout=timeout * 1000, wait_until="networkidle")
+            # "networkidle" часто никогда не наступает на SPA с фоновой
+            # аналитикой/поллингом (таймаут почти гарантирован) — грузим
+            # до domcontentloaded и даём React время дорисовать список.
+            page_obj.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+            page_obj.wait_for_timeout(4000)
             html = page_obj.content()
         finally:
             browser.close()
