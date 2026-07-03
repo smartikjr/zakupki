@@ -3,34 +3,32 @@
 ещё одна коммерческая тендерная площадка (промышленность, стройка,
 энергетика), не завязанная на 44/223-ФЗ.
 
-СТАТУС: адрес поиска был неверным дважды подряд (404) — сайт оказался
-Next.js-приложением (SPA), реальный путь поиска — /procedure/search
-(поле "query", номер страницы — "page_number"). НО: большая часть
-разметки страницы генерируется JS-бандлами на клиенте, серверный HTML
-почти пустой (~2 КБ текста на 200+ КБ файла). Если и с исправленным
-адресом parse_cards() будет возвращать 0 карточек — вероятная причина
-не в селекторах, а в том, что requests+BeautifulSoup в принципе не
-видит то, что дорисовывает JavaScript. В этом случае нужен headless-
-браузер (Playwright/Selenium) вместо простого HTTP-запроса — это уже
-не быстрая правка, а отдельная задача.
+СТАТУС: адрес поиска — /procedure/search (поле "query", страница —
+"page_number"), это подтверждено. Но сайт — Next.js SPA: список закупок
+приходит не обычным HTML, а потоком сериализованных React Server
+Components (не JSON, не DOM) — requests+BeautifulSoup в принципе не
+может это распарсить. Поэтому здесь Playwright — открываем страницу в
+headless Chromium, ждём, пока JS реально отрисует список, и парсим уже
+готовый DOM.
+
+Требует: `pip install playwright` и `playwright install --with-deps
+chromium` (уже добавлено в requirements.txt и .github/workflows).
+
+Селекторы карточек в parse_cards() — рабочая гипотеза, ещё не сверена
+с реальным отрендеренным DOM (нет возможности запустить браузер в среде
+разработки). Если вернёт 0 карточек — запусти debug_dump() (создаст
+debug_fabrikant.html из УЖЕ ОТРЕНДЕРЕННОГО DOM, не сырой HTML) и пришли
+файл — поправят за один заход, как и с остальными источниками.
 """
 
 import time
 from urllib.parse import urlencode, urljoin
 
-import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 BASE = "https://www.fabrikant.ru"
 SEARCH_URL = BASE + "/procedure/search"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
-    ),
-    "Accept-Language": "ru-RU,ru;q=0.9",
-}
 
 
 def build_url(keyword: str, page: int) -> str:
@@ -39,11 +37,20 @@ def build_url(keyword: str, page: int) -> str:
 
 
 def fetch(keyword: str, page: int, timeout: int = 30, proxy: str | None = None) -> str:
+    """Открывает страницу в headless Chromium и возвращает DOM ПОСЛЕ рендера JS."""
     url = build_url(keyword, page)
-    proxies = {"http": proxy, "https": proxy} if proxy else None
-    r = requests.get(url, headers=HEADERS, timeout=timeout, proxies=proxies)
-    r.raise_for_status()
-    return r.text
+    launch_kwargs = {}
+    if proxy:
+        launch_kwargs["proxy"] = {"server": proxy}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(**launch_kwargs)
+        try:
+            page_obj = browser.new_page()
+            page_obj.goto(url, timeout=timeout * 1000, wait_until="networkidle")
+            html = page_obj.content()
+        finally:
+            browser.close()
+    return html
 
 
 def _txt(node) -> str:
@@ -51,14 +58,22 @@ def _txt(node) -> str:
 
 
 def parse_cards(html: str) -> list[dict]:
-    """Разбирает страницу результатов в список карточек-лидов."""
+    """Разбирает отрендеренный DOM в список карточек-лидов."""
     soup = BeautifulSoup(html, "lxml")
-    cards = soup.select("div.trade-item, tr.trade-row, div.search-item")
+    cards = soup.select(
+        "a[href*='/procedure/view/'], div[data-testid*='procedure'], "
+        "div.trade-item, tr.trade-row, div.search-item"
+    )
     results = []
+    seen_links = set()
     for c in cards:
-        link_a = c.select_one("a.trade-item__title, a.search-item__title, a")
+        link_a = c if c.name == "a" else c.select_one("a[href*='/procedure/view/'], a")
         link = urljoin(BASE, link_a["href"]) if (link_a and link_a.has_attr("href")) else ""
-        obj = _txt(link_a) or _txt(c.select_one(".trade-item__title, .search-item__title"))
+        if not link or link in seen_links:
+            continue
+        seen_links.add(link)
+
+        obj = _txt(c.select_one(".trade-item__title, .search-item__title")) or _txt(link_a)
         customer = _txt(c.select_one(".trade-item__customer, .search-item__customer, .company"))
         price = _txt(c.select_one(".trade-item__price, .price"))
         reg_number = _txt(c.select_one(".trade-item__number, .search-item__number"))
@@ -97,7 +112,7 @@ def search(keyword: str, pages: int, pause: float = 1.0, proxy: str | None = Non
 
 
 def debug_dump(keyword: str = "плиты дорожные", path: str = "debug_fabrikant.html", proxy: str | None = None):
-    """Сохраняет сырой HTML первой страницы — чтобы свериться с реальными селекторами."""
+    """Сохраняет ОТРЕНДЕРЕННЫЙ DOM первой страницы — чтобы свериться с реальными селекторами."""
     html = fetch(keyword, 1, proxy=proxy)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
