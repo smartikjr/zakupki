@@ -44,6 +44,17 @@ jobs:
                   fn()
               except Exception as e:
                   print(f'[!] {name}: {e}')
+
+          # fabrikant.ru search URL уже дважды не угадан (404) — снимаем
+          # главную страницу, чтобы найти реальную форму поиска.
+          import requests
+          try:
+              r = requests.get('https://www.fabrikant.ru/', headers=fabrikant.HEADERS, timeout=30)
+              with open('debug_fabrikant_home.html', 'w', encoding='utf-8') as f:
+                  f.write(r.text)
+              print(f'Сохранил debug_fabrikant_home.html ({len(r.text)} символов), статус {r.status_code}')
+          except Exception as e:
+              print(f'[!] fabrikant home: {e}')
           "
 
       - uses: actions/upload-artifact@v4

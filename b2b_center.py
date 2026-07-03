@@ -2,12 +2,13 @@
 Загрузка и разбор публичного поиска процедур на b2b-center.ru —
 крупнейшей коммерческой B2B-тендерной площадке в РФ.
 
-СТАТУС: селекторы ниже — рабочая гипотеза по типовой вёрстке карточек
-объявлений, ещё не сверялась с живым HTML (нет прямого доступа к сайту
-из среды разработки). Почти наверняка потребуется калибровка при первом
-запуске — так же, как задумано для zakupki.py: если parse_cards()
-вернёт 0 карточек, запусти debug_dump() и пришли получившийся HTML —
-селекторы поправят за один заход.
+Откалибровано по реальному HTML (снят через .github/workflows/debug-dump.yml,
+2026-07-03). Ключевая находка: поле поиска называется НЕ "query", а
+"f_keyword" (+ обязательный флаг "searching=1"), иначе сайт отдаёт общую
+ленту последних закупок без фильтра по ключевому слову. Результаты —
+таблица `table.search-results` со строками `tbody > tr`: колонки
+«Название процедуры» (ссылка + `.search-results-title-desc`),
+«Организатор», «Опубликовано», «Актуально до».
 
 Зачем нужен второй источник, кроме ЕИС: 44/223-ФЗ обязывают публиковать
 закупки на zakupki.gov.ru только бюджетные и квази-государственные
@@ -17,6 +18,7 @@
 сделки.
 """
 
+import re
 import time
 from urllib.parse import urlencode, urljoin
 
@@ -34,9 +36,11 @@ HEADERS = {
     "Accept-Language": "ru-RU,ru;q=0.9",
 }
 
+_TENDER_ID_RE = re.compile(r"tender-(\d+)")
+
 
 def build_url(keyword: str, page: int) -> str:
-    params = {"query": keyword, "page": page}
+    params = {"f_keyword": keyword, "searching": 1, "page": page}
     return SEARCH_URL + "?" + urlencode(params, encoding="utf-8")
 
 
@@ -55,16 +59,27 @@ def _txt(node) -> str:
 def parse_cards(html: str) -> list[dict]:
     """Разбирает страницу результатов в список карточек-лидов."""
     soup = BeautifulSoup(html, "lxml")
-    cards = soup.select("div.procedure-item, tr.procedure-row, div.tender-item")
+    table = soup.select_one("table.search-results")
+    if not table:
+        return []
     results = []
-    for c in cards:
-        link_a = c.select_one("a.procedure-item__title, a.tender-title, a")
-        link = urljoin(BASE, link_a["href"]) if (link_a and link_a.has_attr("href")) else ""
-        obj = _txt(link_a) or _txt(c.select_one(".procedure-item__title, .tender-title"))
-        customer = _txt(c.select_one(".procedure-item__customer, .tender-customer, .company"))
-        price = _txt(c.select_one(".procedure-item__price, .price"))
-        reg_number = _txt(c.select_one(".procedure-item__number, .tender-number"))
-        date_val = _txt(c.select_one(".procedure-item__date, .tender-date"))
+    for row in table.select("tbody > tr"):
+        cells = row.select("td")
+        if len(cells) < 3:
+            continue
+        title_a = cells[0].select_one("a.search-results-title") or cells[0].select_one("a")
+        link = urljoin(BASE, title_a["href"]) if (title_a and title_a.has_attr("href")) else ""
+
+        desc = cells[0].select_one(".search-results-title-desc")
+        obj = _txt(desc) or _txt(title_a)
+
+        m = _TENDER_ID_RE.search(link)
+        reg_number = m.group(1) if m else ""
+
+        customer = _txt(cells[1].select_one("a")) or _txt(cells[1])
+        published = _txt(cells[2]) if len(cells) > 2 else ""
+        deadline = _txt(cells[3]) if len(cells) > 3 else ""
+        dates = " — ".join(v for v in (published, deadline) if v)
 
         if not (obj or reg_number):
             continue
@@ -74,8 +89,8 @@ def parse_cards(html: str) -> list[dict]:
                 "reg_number": reg_number,
                 "object": obj,
                 "customer_name": customer,
-                "price": price,
-                "dates": date_val,
+                "price": "",
+                "dates": dates,
                 "link": link,
             }
         )
