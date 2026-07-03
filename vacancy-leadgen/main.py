@@ -22,6 +22,7 @@
 """
 
 import os
+import re
 import time
 
 import yaml
@@ -110,6 +111,12 @@ def main() -> None:
 
     proxy = (cfg.get("hh_proxy") or "").strip() or os.environ.get("HH_PROXY", "").strip()
     proxy = proxy or None
+    if proxy:
+        # маскируем логин:пароль, чтобы не светить их в логах Actions
+        masked = re.sub(r"//[^@]+@", "//***:***@", proxy)
+        print(f"[i] Использую прокси для hh.ru: {masked}")
+    else:
+        print("[i] HH_PROXY не задан — иду напрямую (может упереться в 403, как раньше).")
 
     companies = collect_companies(cfg, proxy)
     print(f"[=] Уникальных компаний с hh.ru: {len(companies)}")
