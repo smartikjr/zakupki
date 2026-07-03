@@ -3,10 +3,16 @@
 ещё одна коммерческая тендерная площадка (промышленность, стройка,
 энергетика), не завязанная на 44/223-ФЗ.
 
-СТАТУС: как и b2b_center.py — селекторы не сверялись с живым HTML,
-почти наверняка потребуют калибровки. Если parse_cards() вернёт
-0 карточек — запусти debug_dump() (создаст debug_fabrikant.html) и
-пришли файл, селекторы поправят за один заход.
+СТАТУС: адрес поиска был неверным дважды подряд (404) — сайт оказался
+Next.js-приложением (SPA), реальный путь поиска — /procedure/search
+(поле "query", номер страницы — "page_number"). НО: большая часть
+разметки страницы генерируется JS-бандлами на клиенте, серверный HTML
+почти пустой (~2 КБ текста на 200+ КБ файла). Если и с исправленным
+адресом parse_cards() будет возвращать 0 карточек — вероятная причина
+не в селекторах, а в том, что requests+BeautifulSoup в принципе не
+видит то, что дорисовывает JavaScript. В этом случае нужен headless-
+браузер (Playwright/Selenium) вместо простого HTTP-запроса — это уже
+не быстрая правка, а отдельная задача.
 """
 
 import time
@@ -16,7 +22,7 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE = "https://www.fabrikant.ru"
-SEARCH_URL = BASE + "/search/"
+SEARCH_URL = BASE + "/procedure/search"
 
 HEADERS = {
     "User-Agent": (
@@ -28,7 +34,7 @@ HEADERS = {
 
 
 def build_url(keyword: str, page: int) -> str:
-    params = {"searchString": keyword, "page": page}
+    params = {"query": keyword, "page_number": page}
     return SEARCH_URL + "?" + urlencode(params, encoding="utf-8")
 
 
