@@ -2,4 +2,4 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-debug_eis.html
+debug_*.html
