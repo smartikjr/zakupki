@@ -40,4 +40,16 @@ jobs:
           git config user.email "bot@users.noreply.github.com"
           git add leads.xlsx || true
           git commit -m "leads: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
-          git push || true
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "пуш прошёл (попытка $i)"
+              exit 0
+            fi
+            echo "пуш отклонён (попытка $i) — подтягиваю свежую ветку и переношу коммит поверх"
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset --soft "origin/$GITHUB_REF_NAME"
+            git add leads.xlsx || true
+            git commit -m "leads: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений для коммита"
+            sleep $((i * 3))
+          done
+          echo "::warning::не удалось запушить leads.xlsx после нескольких попыток"
