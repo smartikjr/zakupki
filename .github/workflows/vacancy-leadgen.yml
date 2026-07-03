@@ -1,0 +1,45 @@
+name: Поиск подрядчиков (HH.ru)
+
+# Пока только ручной запуск — сначала проверить, что hh.ru доступен с
+# серверов GitHub Actions (в отличие от zakupki.gov.ru пока не
+# проверялось). После подтверждения можно добавить schedule по
+# аналогии с leadgen.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vacancy-leadgen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vacancy-leadgen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Собрать компании
+        env:
+          DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
+          HH_PROXY: ${{ secrets.HH_PROXY }}
+        run: python main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companies
+          path: vacancy-leadgen/companies.xlsx
+
+      - name: Закоммитить результат
+        run: |
+          git config user.name "leadgen-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add companies.xlsx || true
+          git commit -m "companies: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
+          git push || true
