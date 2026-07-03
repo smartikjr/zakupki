@@ -1,0 +1,50 @@
+name: Снять HTML для отладки селекторов
+
+on:
+  workflow_dispatch:
+    inputs:
+      keyword:
+        description: "Ключевое слово для тестового запроса"
+        required: false
+        default: "плиты дорожные"
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Снять debug-HTML со всех источников
+        env:
+          KEYWORD: ${{ inputs.keyword }}
+          ZAKUPKI_PROXY: ${{ secrets.ZAKUPKI_PROXY }}
+        run: |
+          python -c "
+          import os
+          import b2b_center, fabrikant, zakupki
+
+          kw = os.environ.get('KEYWORD') or 'плиты дорожные'
+          proxy = os.environ.get('ZAKUPKI_PROXY') or None
+
+          for name, fn in (
+              ('b2b-center', lambda: b2b_center.debug_dump(keyword=kw, path='debug_b2b.html', proxy=proxy)),
+              ('fabrikant', lambda: fabrikant.debug_dump(keyword=kw, path='debug_fabrikant.html', proxy=proxy)),
+              ('ЕИС', lambda: zakupki.debug_dump(keyword=kw, law=44, path='debug_eis.html', proxy=proxy)),
+          ):
+              try:
+                  fn()
+              except Exception as e:
+                  print(f'[!] {name}: {e}')
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-html
+          path: debug_*.html
+          if-no-files-found: warn
