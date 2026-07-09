@@ -1,8 +1,9 @@
 """Выгрузка списка лидов в .xlsx (openpyxl)."""
 
+import os
 from datetime import datetime
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -25,6 +26,29 @@ COLUMNS = [
     ("Адрес", "address", 40),
     ("Ссылка", "link", 45),
 ]
+
+
+def load_existing(path: str) -> list[dict]:
+    """Читает ранее сохранённые лиды обратно в список словарей.
+
+    Нужно, чтобы новый прогон не терял уже найденные лиды и не
+    дублировал их — только добавлял действительно новые.
+    """
+    if not os.path.exists(path):
+        return []
+    wb = load_workbook(path)
+    ws = wb.active
+    key_by_title = {title: key for title, key, _w in COLUMNS}
+    headers = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
+    leads = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        lead = {}
+        for title, val in zip(headers, row):
+            key = key_by_title.get(title)
+            if key:
+                lead[key] = val if val is not None else ""
+        leads.append(lead)
+    return leads
 
 
 def export(leads: list[dict], path: str) -> None:

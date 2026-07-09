@@ -13,7 +13,10 @@
   5. обогащаем заказчика через DaData (ИНН, регион, руководитель, ОКВЭД);
   6. фильтруем по нашим регионам;
   7. помечаем тип закупки (Поставка / Работы / Прочее) — материал вs подряд;
-  8. выгружаем в Excel.
+  8. сверяем с уже выгруженными раньше лидами (по источнику+реестровому
+     №) — не повторяем то, что уже было в leads.xlsx, только добавляем
+     новое поверх накопленного файла;
+  9. выгружаем в Excel.
 
 Запуск:  python leadgen.py
 Токен DaData:  переменная окружения DADATA_TOKEN  (или поле в config.yaml)
@@ -78,6 +81,11 @@ def deal_type(obj: str) -> str:
     return "Прочее"
 
 
+def lead_key(card: dict) -> tuple:
+    reg = card.get("reg_number") or ""
+    return (card.get("source", ""), reg) if reg else (card.get("source", ""), card.get("object", ""))
+
+
 def region_matches(lead: dict, targets: list[str]) -> bool:
     if not targets:
         return True
@@ -136,8 +144,7 @@ def main() -> None:
     seen = set()
     raw_leads: list[dict] = []
     for card in raw_cards:
-        reg = card.get("reg_number") or ""
-        key = (card["source"], reg) if reg else (card["source"], card.get("object", ""))
+        key = lead_key(card)
         if key in seen:
             continue
         seen.add(key)
@@ -165,10 +172,17 @@ def main() -> None:
     for lead in leads:
         lead["deal_type"] = deal_type(lead.get("object", ""))
 
-    # 8. Выгрузка
+    # 8. Не повторяем лиды, уже выгруженные в прошлых прогонах — только
+    # добавляем действительно новые поверх накопленного файла.
     out = cfg.get("output_file", "leads.xlsx")
-    export.export(leads, out)
-    print(f"[✓] Готово: {out}  ({len(leads)} лидов)")
+    existing = export.load_existing(out)
+    existing_keys = {lead_key(l) for l in existing}
+    new_leads = [l for l in leads if lead_key(l) not in existing_keys]
+    print(f"[=] Уже были в {out} ранее: {len(leads) - len(new_leads)}, новых: {len(new_leads)}")
+
+    combined = existing + new_leads
+    export.export(combined, out)
+    print(f"[✓] Готово: {out}  (всего {len(combined)} лидов, из них новых в этом прогоне: {len(new_leads)})")
 
 
 if __name__ == "__main__":
