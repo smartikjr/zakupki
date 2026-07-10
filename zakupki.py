@@ -18,6 +18,7 @@ import time
 from urllib.parse import urlencode, urljoin
 
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 
 BASE = "https://zakupki.gov.ru"
@@ -53,7 +54,15 @@ def build_url(keyword: str, law: int, page: int) -> str:
 def fetch(keyword: str, law: int, page: int, timeout: int = 30, proxy: str | None = None) -> str:
     url = build_url(keyword, law, page)
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    r = requests.get(url, headers=HEADERS, timeout=timeout, proxies=proxies)
+    # Коммерческие прокси часто переупаковывают TLS-соединение (свой
+    # CONNECT-туннель/MITM), из-за чего Python не может проверить цепочку
+    # сертификатов zakupki.gov.ru (SSL: CERTIFICATE_VERIFY_FAILED), хотя
+    # сам сайт настоящий. Отключаем проверку только когда идём через
+    # прокси — без прокси проверка сертификата остаётся включена.
+    verify = not proxy
+    if proxy:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    r = requests.get(url, headers=HEADERS, timeout=timeout, proxies=proxies, verify=verify)
     r.raise_for_status()
     return r.text
 
