@@ -69,39 +69,65 @@ def _get(d: dict, *keys, default=""):
     return default
 
 
+# Только этот статус означает "реально действующий член СРО" — остальные
+# встреченные значения ("Исключен" и т.п.) — прекратившие членство компании,
+# не годятся в лиды. Найдено по реальному ответу API (2026-07-13).
+ACTIVE_STATUS_TITLE = "Является членом"
+
+
 def parse_cards(data) -> list[dict]:
     """Разбирает JSON-ответ sro/all/member/list в список карточек-лидов.
 
-    Точная форма ответа ещё не проверена на реальных данных — правь при
-    необходимости после первого живого запроса (см. debug_dump()).
+    Реальная форма ответа (найдена по живому ответу API, 2026-07-13):
+    {"data": {"data": [...карточки...], "page", "countPages", "count"},
+     "success", "message"} — двойная вложенность "data.data", не просто
+    "data". Каждая карточка — вложенные объекты (не плоские поля):
+    `sro.full_description`, `region_number.title`, `member_status.title`.
+    Отбираем только записи с активным статусом членства (см.
+    ACTIVE_STATUS_TITLE) — иначе в выдаче будут в основном исключённые
+    из СРО компании (в реестре ~417 тыс. записей всего, из них активных
+    заметно меньше).
     """
     items = []
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        for key in ("data", "items", "list"):
-            v = data.get(key)
+    if isinstance(data, dict):
+        inner = data.get("data")
+        if isinstance(inner, dict):
+            v = inner.get("data")
             if isinstance(v, list):
                 items = v
-                break
+        elif isinstance(inner, list):
+            items = inner
+    elif isinstance(data, list):
+        items = data
+
     results = []
     for item in items:
         if not isinstance(item, dict):
             continue
+
+        status = item.get("member_status") or {}
+        status_title = status.get("title", "") if isinstance(status, dict) else ""
+        if status_title != ACTIVE_STATUS_TITLE:
+            continue
+
         company_name = _get(item, "full_description", "fullDescription", "name")
         if not company_name:
             continue
+
+        sro = item.get("sro") or {}
+        region = item.get("region_number") or {}
+
         results.append(
             {
                 "company_name": company_name,
                 "inn": _get(item, "inn"),
                 "ogrn": _get(item, "ogrnip", "ogrn"),
-                "sro_name": _get(item, "sro_full_description", "sroFullDescription"),
-                "region": _get(item, "region_number", "regionNumber", "region"),
-                "status_sro": _get(item, "member_status", "memberStatus"),
+                "sro_name": sro.get("full_description", "") if isinstance(sro, dict) else "",
+                "region": region.get("title", "") if isinstance(region, dict) else "",
+                "status_sro": status_title,
                 "admission_date": _get(item, "registry_registration_date", "registryRegistrationDate"),
                 "director": _get(item, "director"),
-                "address": _get(item, "place", "address"),
+                "address": "",
                 "link": "",
             }
         )
