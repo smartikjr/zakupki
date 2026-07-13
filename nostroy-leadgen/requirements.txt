@@ -1,0 +1,6 @@
+requests
+pysocks
+beautifulsoup4
+lxml
+openpyxl
+pyyaml

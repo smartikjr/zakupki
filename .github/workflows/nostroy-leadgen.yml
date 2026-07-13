@@ -1,0 +1,76 @@
+name: Поиск лидов (НОСТРОЙ)
+
+# Пока только ручной запуск — селекторы nostroy.py ещё не откалиброваны
+# по реальному HTML (домен недоступен из песочницы, где писался код).
+# Первые прогоны нужны для калибровки через debug_dump().
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  nostroy-leadgen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nostroy-leadgen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Снять debug-HTML для калибровки селекторов
+        env:
+          NOSTROY_PROXY: ${{ secrets.NOSTROY_PROXY }}
+        run: |
+          python -c "
+          import os
+          import nostroy
+
+          proxy = os.environ.get('NOSTROY_PROXY') or None
+          try:
+              nostroy.debug_dump(proxy=proxy)
+          except Exception as e:
+              print(f'[!] nostroy debug_dump: {e}')
+          "
+
+      - name: Собрать лиды
+        env:
+          DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
+          NOSTROY_PROXY: ${{ secrets.NOSTROY_PROXY }}
+        run: python main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nostroy-leads
+          path: |
+            nostroy-leadgen/nostroy.xlsx
+            nostroy-leadgen/debug_*.html
+          if-no-files-found: warn
+
+      - name: Закоммитить результат (Excel + debug-HTML)
+        run: |
+          git config user.name "leadgen-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add nostroy.xlsx || true
+          git add -f debug_*.html || true
+          git commit -m "nostroy: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "пуш прошёл (попытка $i)"
+              exit 0
+            fi
+            echo "пуш отклонён (попытка $i) — подтягиваю свежую ветку и переношу коммит поверх"
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset --soft "origin/$GITHUB_REF_NAME"
+            git add nostroy.xlsx || true
+            git add -f debug_*.html || true
+            git commit -m "nostroy: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений для коммита"
+            sleep $((i * 3))
+          done
+          echo "::warning::не удалось запушить результат после нескольких попыток"
