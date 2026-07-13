@@ -44,9 +44,13 @@ jobs:
         env:
           DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
           NOSTROY_PROXY: ${{ secrets.NOSTROY_PROXY }}
+        # Пока идёт калибровка — не терять debug-HTML/JSON, даже если
+        # main.py упадёт на неожиданном формате ответа API.
+        continue-on-error: true
         run: python main.py
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: nostroy-leads
           path: |
@@ -55,6 +59,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Закоммитить результат (Excel + debug-HTML)
+        if: always()
         run: |
           git config user.name "leadgen-bot"
           git config user.email "bot@users.noreply.github.com"

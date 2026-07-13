@@ -60,6 +60,8 @@ def api_post(endpoint: str, payload: dict, timeout: int = 30, proxy: str | None 
 
 
 def _get(d: dict, *keys, default=""):
+    if not isinstance(d, dict):
+        return default
     for k in keys:
         v = d.get(k)
         if v not in (None, ""):
@@ -67,17 +69,25 @@ def _get(d: dict, *keys, default=""):
     return default
 
 
-def parse_cards(data: dict) -> list[dict]:
+def parse_cards(data) -> list[dict]:
     """Разбирает JSON-ответ sro/all/member/list в список карточек-лидов.
 
     Точная форма ответа ещё не проверена на реальных данных — правь при
     необходимости после первого живого запроса (см. debug_dump()).
     """
-    items = data.get("data") or data.get("items") or data.get("list") or []
+    items = []
     if isinstance(data, list):
         items = data
+    elif isinstance(data, dict):
+        for key in ("data", "items", "list"):
+            v = data.get(key)
+            if isinstance(v, list):
+                items = v
+                break
     results = []
     for item in items:
+        if not isinstance(item, dict):
+            continue
         company_name = _get(item, "full_description", "fullDescription", "name")
         if not company_name:
             continue
@@ -109,7 +119,11 @@ def search(pages: int = 1, page_size: int = 50, pause: float = 1.0, proxy: str |
         except Exception as e:  # noqa: BLE001
             print(f"    [!] ошибка загрузки НОСТРОЙ (стр.{page}): {e}")
             break
-        cards = parse_cards(data)
+        try:
+            cards = parse_cards(data)
+        except Exception as e:  # noqa: BLE001
+            print(f"    [!] ошибка разбора ответа НОСТРОЙ (стр.{page}): {e}")
+            break
         out.extend(cards)
         if not cards:
             break
@@ -119,17 +133,26 @@ def search(pages: int = 1, page_size: int = 50, pause: float = 1.0, proxy: str |
 
 def debug_dump(path_response: str = "debug_nostroy_api_response.json", proxy: str | None = None):
     """Делает реальный POST-запрос к sro/all/member/list и сохраняет
-    сырой JSON-ответ — для калибровки parse_cards()."""
+    сырой JSON-ответ — для калибровки parse_cards(). Сохраняет ответ
+    ДО попытки разбора, чтобы файл остался даже если parse_cards() упадёт."""
     import json
 
     payload = {"filters": {}, "page": 1, "pageCount": 5, "sortBy": {}, "searchString": ""}
     try:
         data = api_post(ENDPOINT_MEMBER_LIST_ALL, payload, proxy=proxy)
-        with open(path_response, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"Сохранил {path_response}. Найдено карточек: {len(parse_cards(data))}")
     except Exception as e:  # noqa: BLE001
         print(f"    [!] запрос к API не сработал: {e}")
+        return
+
+    with open(path_response, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"Сохранил {path_response} (тип: {type(data).__name__}).")
+
+    try:
+        cards = parse_cards(data)
+        print(f"Найдено карточек: {len(cards)}")
+    except Exception as e:  # noqa: BLE001
+        print(f"    [!] parse_cards() упал на реальном ответе: {e}")
 
 
 if __name__ == "__main__":
