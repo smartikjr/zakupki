@@ -1,0 +1,192 @@
+{
+  "data": {
+    "data": [
+      {
+        "registry_registration_date_time_string": "12.03.2014 00:00:00",
+        "last_updated_at_date_time_string": "01.08.2018 09:55:03",
+        "last_updated_contracts_at_date_time_string": "",
+        "last_updated_experts_at_date_time_string": "",
+        "members_total_liability_last_count_dt_date_string": "",
+        "id": 4047586,
+        "member_type": {
+          "id": 1,
+          "code": "1",
+          "title": "ЮЛ"
+        },
+        "member_status": {
+          "id": 2,
+          "code": "2",
+          "title": "Исключен"
+        },
+        "region_number": {
+          "id": 28,
+          "code": "59",
+          "title": "Пермский край"
+        },
+        "full_description": "000 \"СтройМонтаж-59\"",
+        "short_description": "000 \"СтройМонтаж-59\"",
+        "registration_number": "906",
+        "registry_registration_date": "2014-03-12T00:00:00+04:00",
+        "ogrnip": "1135907001801",
+        "inn": "5907056036",
+        "director": "директор Земцов Игорь Владимирович",
+        "sro": {
+          "id": 238,
+          "full_description": "Саморегулируемая организация Союз «Строители Урала»",
+          "registration_number": "СРО-С-171-13012010"
+        },
+        "inventory_number": "С-171-005907056036-0906"
+      },
+      {
+        "registry_registration_date_time_string": "17.04.2017 00:00:00",
+        "last_updated_at_date_time_string": "24.09.2019 17:40:13",
+        "last_updated_contracts_at_date_time_string": "",
+        "last_updated_experts_at_date_time_string": "",
+        "members_total_liability_last_count_dt_date_string": "",
+        "id": 4117425,
+        "member_type": {
+          "id": 1,
+          "code": "1",
+          "title": "ЮЛ"
+        },
+        "member_status": {
+          "id": 2,
+          "code": "2",
+          "title": "Исключен"
+        },
+        "region_number": {
+          "id": 40,
+          "code": "36",
+          "title": "Воронежская область"
+        },
+        "full_description": "0бщество с ограниченной ответственностью \"МОНТВЕНТ\"",
+        "short_description": "ООО \"МОНТВЕНТ\"",
+        "registration_number": "0721",
+        "registry_registration_date": "2017-04-17T00:00:00+03:00",
+        "ogrnip": "1173668013750",
+        "inn": "3666217280",
+        "director": "Генеральный директор Горшенев Иван Александрович",
+        "sro": {
+          "id": 270,
+          "full_description": "Ассоциация Саморегулируемая организация  «Региональное объединение строителей «Развитие»",
+          "registration_number": "СРО-С-204-24022010"
+        },
+        "inventory_number": "С-204-003666217280-0755"
+      },
+      {
+        "registry_registration_date_time_string": "19.09.2025 00:00:00",
+        "last_updated_at_date_time_string": "26.06.2026 18:14:55",
+        "last_updated_contracts_at_date_time_string": "",
+        "last_updated_experts_at_date_time_string": "",
+        "members_total_liability_last_count_dt_date_string": "",
+        "id": 5900384,
+        "member_type": {
+          "id": 1,
+          "code": "1",
+          "title": "ЮЛ"
+        },
+        "member_status": {
+          "id": 1,
+          "code": "1",
+          "title": "Является членом"
+        },
+        "region_number": {
+          "id": 77,
+          "code": "77",
+          "title": "Москва"
+        },
+        "full_description": "Cтроительная компания «ДомСтрой»",
+        "short_description": "СК «ДомСтрой»",
+        "registration_number": "0369",
+        "registry_registration_date": "2025-09-19T00:00:00+03:00",
+        "ogrnip": "1147746116033",
+        "inn": "7705552444",
+        "director": "Генеральный директор Егоркин Евгений Николаевич",
+        "sro": {
+          "id": 393,
+          "full_description": "Ассоциация по содействию строительным организациям в осуществлении ими профессиональной деятельности «Альянс Строителей Столицы»",
+          "registration_number": "СРО-С-295-18042018",
+          "deactivate_message": ""
+        },
+        "inventory_number": "С-295-007705552444-0369"
+      },
+      {
+        "registry_registration_date_time_string": "17.09.2019 00:00:00",
+        "last_updated_at_date_time_string": "24.10.2022 11:20:31",
+        "last_updated_contracts_at_date_time_string": "",
+        "last_updated_experts_at_date_time_string": "",
+        "members_total_liability_last_count_dt_date_string": "",
+        "id": 5807340,
+        "member_type": {
+          "id": 3,
+          "code": "3",
+          "title": "Иностранное ЮЛ"
+        },
+        "member_status": {
+          "id": 2,
+          "code": "2",
+          "title": "Исключен"
+        },
+        "region_number": {
+          "id": 86,
+          "code": "00",
+          "title": "Не резиденты"
+        },
+        "full_description": "INTERNATIONAL DRILLING & MINING GERMANY GMBH",
+        "short_description": "INTERNATIONAL DRILLING & MINING GERMANY GMBH",
+        "registration_number": "170919/553",
+        "registry_registration_date": "2019-09-17T00:00:00+03:00",
+        "ogrnip": "34057245047",
+        "inn": "34057245047",
+        "director": "Мидхат Дзафик",
+        "sro": {
+          "id": 294,
+          "full_description": "Ассоциация содействия реставрации и возрождению национального архитектурного наследия «Архитектурное наследие»",
+          "registration_number": "СРО-С-230-07092010"
+        },
+        "inventory_number": "С-230-034057245047-3453"
+      },
+      {
+        "registry_registration_date_time_string": "13.03.2017 00:00:00",
+        "last_updated_at_date_time_string": "28.06.2018 18:20:02",
+        "last_updated_contracts_at_date_time_string": "",
+        "last_updated_experts_at_date_time_string": "",
+        "members_total_liability_last_count_dt_date_string": "",
+        "id": 2989033,
+        "member_type": {
+          "id": 1,
+          "code": "1",
+          "title": "ЮЛ"
+        },
+        "member_status": {
+          "id": 2,
+          "code": "2",
+          "title": "Исключен"
+        },
+        "region_number": {
+          "id": 66,
+          "code": "65",
+          "title": "Сахалинская область"
+        },
+        "full_description": "OOO \"Автобокс\"",
+        "short_description": "OOO Автобокс",
+        "registration_number": "576",
+        "registry_registration_date": "2017-03-13T00:00:00+03:00",
+        "ogrnip": "1096501002751",
+        "inn": "6501206652",
+        "director": "Генеральный директор Лежнёв Игорь Владимирович",
+        "sro": {
+          "id": 175,
+          "full_description": "Ассоциация «Региональное отраслевое объединение работодателей - Саморегулируемая организация в области строительства «СпецСтройРеконструкция»",
+          "registration_number": "СРО-С-108-11122009"
+        },
+        "inventory_number": "С-108-006501206652-0576"
+      }
+    ],
+    "page": 1,
+    "countPages": 83467.0,
+    "count": 417331
+  },
+  "success": true,
+  "message": ""
+}
