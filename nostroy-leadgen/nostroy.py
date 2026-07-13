@@ -118,26 +118,35 @@ def debug_dump(
     except Exception as e:  # noqa: BLE001
         print(f"    [!] поиск по угаданному URL не сработал: {e}")
 
-    # SPA (Vue) — реального контента в HTML нет, но адрес backend-API
-    # часто виден прямо в коде фронтенда (baseURL/axios/fetch).
+    # SPA (Vue, webpack) — app.*.js это только загрузчик чанков, реальный
+    # код (роуты, axios/API) лежит в отдельных chunk-*.js/chunk-vendors*.js.
+    # Тянем ВСЕ js, на которые есть ссылка в HTML (prefetch/preload/src),
+    # и сохраняем каждый отдельным файлом — адрес API должен быть в одном
+    # из них текстом (baseURL/axios.create/строка вида "/api/...").
     soup = BeautifulSoup(reestr_html, "lxml") if reestr_html else None
-    js_src = None
+    js_urls: list[str] = []
     if soup:
-        for script in soup.select("script[src]"):
-            src = script["src"]
-            if "app." in src and src.endswith(".js"):
-                js_src = urljoin(REESTR_BASE, src)
-                break
-    if js_src:
+        for tag in soup.select("script[src], link[href]"):
+            src = tag.get("src") or tag.get("href") or ""
+            if src.endswith(".js"):
+                js_urls.append(urljoin(REESTR_BASE, src))
+    js_urls = sorted(set(js_urls))
+
+    combined = []
+    for url in js_urls:
+        name = url.rstrip("/").rsplit("/", 1)[-1]
         try:
-            js_text = fetch(js_src, proxy=proxy)
-            with open(path_js_bundle, "w", encoding="utf-8") as f:
-                f.write(js_text)
-            print(f"Сохранил {path_js_bundle} ({len(js_text)} символов) — {js_src}")
+            js_text = fetch(url, proxy=proxy)
+            combined.append(f"===== {url} =====\n{js_text}\n")
+            print(f"    скачал {name} ({len(js_text)} символов)")
         except Exception as e:  # noqa: BLE001
-            print(f"    [!] JS-бандл не скачался: {e}")
+            print(f"    [!] {name} не скачался: {e}")
+    if combined:
+        with open(path_js_bundle, "w", encoding="utf-8") as f:
+            f.write("\n".join(combined))
+        print(f"Сохранил {path_js_bundle} — {len(js_urls)} JS-файлов, всего {sum(len(c) for c in combined)} символов")
     else:
-        print("    [!] не нашёл ссылку на app.*.js в HTML reestr.nostroy.ru")
+        print("    [!] не нашёл ни одной ссылки на .js в HTML reestr.nostroy.ru")
 
 
 if __name__ == "__main__":
