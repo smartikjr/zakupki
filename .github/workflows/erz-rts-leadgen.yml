@@ -1,0 +1,82 @@
+name: Поиск лидов (ЕРЗ.РФ + РТС-тендер)
+
+# Пока только ручной запуск — селекторы rts_tender.py/erz.py ещё не
+# откалиброваны по реальному HTML (домены недоступны из песочницы, где
+# писался код). Первые прогоны нужны для калибровки через debug_dump(),
+# а не для реального сбора лидов.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  erz-rts-leadgen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: erz-rts-leadgen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Снять debug-HTML для калибровки селекторов
+        env:
+          ERZ_RTS_PROXY: ${{ secrets.ERZ_RTS_PROXY }}
+        run: |
+          python -c "
+          import os
+          import erz, rts_tender
+
+          proxy = os.environ.get('ERZ_RTS_PROXY') or None
+
+          for name, fn in (
+              ('rts-tender', lambda: rts_tender.debug_dump(proxy=proxy)),
+              ('erz', lambda: erz.debug_dump(proxy=proxy)),
+          ):
+              try:
+                  fn()
+              except Exception as e:
+                  print(f'[!] {name}: {e}')
+          "
+
+      - name: Собрать лиды
+        env:
+          DADATA_TOKEN: ${{ secrets.DADATA_TOKEN }}
+          ERZ_RTS_PROXY: ${{ secrets.ERZ_RTS_PROXY }}
+        run: python main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: erz-rts-leads
+          path: |
+            erz-rts-leadgen/erz_rts.xlsx
+            erz-rts-leadgen/debug_*.html
+          if-no-files-found: warn
+
+      - name: Закоммитить результат (Excel + debug-HTML)
+        run: |
+          git config user.name "leadgen-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add erz_rts.xlsx || true
+          git add -f debug_*.html || true
+          git commit -m "erz-rts: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "пуш прошёл (попытка $i)"
+              exit 0
+            fi
+            echo "пуш отклонён (попытка $i) — подтягиваю свежую ветку и переношу коммит поверх"
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset --soft "origin/$GITHUB_REF_NAME"
+            git add erz_rts.xlsx || true
+            git add -f debug_*.html || true
+            git commit -m "erz-rts: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений для коммита"
+            sleep $((i * 3))
+          done
+          echo "::warning::не удалось запушить результат после нескольких попыток"
