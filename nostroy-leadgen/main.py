@@ -4,14 +4,14 @@ nostroy.ru). Выгружает ОТДЕЛЬНЫЙ Excel-файл `nostroy.xlsx`
 с остальными тремя приложениями (leadgen.py / vacancy-leadgen /
 erz-rts-leadgen).
 
-СТАТУС: селекторы nostroy.py ещё НЕ откалиброваны по реальному HTML —
-домен недоступен из песочницы, где писался код (та же стартовая
-ситуация, что была изначально с zakupki.gov.ru/b2b-center.ru/erzrf.ru).
-Первый прогон почти наверняка вернёт 0 строк — нужна калибровка через
-debug_dump() (см. nostroy.py и .github/workflows/nostroy-leadgen.yml).
+СТАТУС: nostroy.py откалиброван — реальный API нашёлся в JS-бандле
+фронтенда (reestr.nostroy.ru — Vue SPA без SSR, см. докстринг nostroy.py).
+Известное ограничение: фильтр по региону пока не применяется (нужен
+числовой код региона, который не нашёлся текстом в JS) — собираем общий
+список членов СРО без региональной привязки.
 
 Конвейер:
-  1. собираем сырые карточки по регионам;
+  1. собираем сырые карточки (постранично);
   2. дедуп внутри прогона (по ИНН/ОГРН, а если их нет — по названию);
   3. отсекаем явно бюрократических/бюджетных (тот же список, что в
      остальных приложениях);
@@ -64,10 +64,8 @@ def row_key(row: dict) -> str:
 
 
 def collect(cfg: dict, proxy: str | None) -> list[dict]:
-    out: list[dict] = []
-    for region in cfg.get("regions", []):
-        print(f"[>] НОСТРОЙ «{region}»")
-        out.extend(nostroy.search(region, cfg.get("pages_per_region", 2), proxy=proxy))
+    print("[>] НОСТРОЙ (реестр членов СРО, все регионы)")
+    out = nostroy.search(pages=cfg.get("pages", 3), page_size=cfg.get("page_size", 50), proxy=proxy)
     seen = set()
     uniq = []
     for card in out:

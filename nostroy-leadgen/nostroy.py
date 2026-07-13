@@ -1,6 +1,6 @@
 """
 Загрузка данных из Единого реестра членов СРО строителей — НОСТРОЙ
-(nostroy.ru / reestr.nostroy.ru).
+(reestr.nostroy.ru).
 
 Зачем этот источник: официальный реестр всех строительных компаний с
 допуском СРО (обязателен по закону для большинства строительных работ)
@@ -10,26 +10,37 @@
 с допуском к строительству, включая тех, кто пока нигде не засветился
 в тендерах, но реально ведёт стройки.
 
-ВАЖНО: селекторы ниже ещё НЕ откалиброваны по реальному HTML — домен
-недоступен из песочницы, где пишется этот код (та же стартовая
-ситуация, что была с zakupki.py/b2b_center.py/erz.py). debug_dump()
-снимает HTML главной страницы nostroy.ru (чтобы найти реальный адрес
-реестра в меню — именно так нашли правильный URL для erzrf.ru) и
-попытки поиска по угаданному URL реестра — по ним нужно поправить
-build_url()/parse_cards().
+Откалибровано по реальному коду фронтенда (2026-07-13): reestr.nostroy.ru
+— Vue SPA без server-side рендеринга (реального контента в HTML нет,
+как у fabrikant.ru), но реальный backend-API нашёлся прямо в JS-бандле
+приложения (константа `i="https://reestr.nostroy.ru/api/"` рядом с
+списком эндпоинтов). Все запросы — POST с JSON-телом
+`{filters, page, pageCount, sortBy, searchString}`, `Content-Type:
+application/json`. Нужный эндпоинт — "sro/all/member/list" (список
+членов СРО по всем СРО сразу, а не по одной конкретной) — соответствует
+компоненту "MemberListByAllSro" с полями фильтра:
+region_number, sro_registration_number, sro_full_description,
+member_status, full_description (название члена), inn, ogrnip,
+registry_registration_date, director.
+
+ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ: `region_number`, судя по названию поля — числовой
+код субъекта РФ (как `regionKey` у ЕРЗ.РФ), а не текстовое название.
+Соответствие "название региона → числовой код" нигде не нашлось в JS
+текстом (видимо, тянется отдельным запросом `dictionaries/get` в момент
+открытия формы фильтра в браузере). Пока фильтр по региону не
+применяется — search() запрашивает список без фильтра по региону,
+разбирая нужные записи только по названию/адресу постфактум, если
+получится. Если нужна точная региональная выборка — придётся либо
+вызвать `dictionaries/get` и найти нужные коды регионов, либо смотреть
+в браузере (devtools → Network) при выборе региона в фильтре на сайте.
 """
 
 import time
-from urllib.parse import urlencode, urljoin
 
 import requests
-from bs4 import BeautifulSoup
 
-MAIN_BASE = "https://nostroy.ru"
-# Реестр СРО обычно живёт на отдельном поддомене — ДОГАДКА, уточнить
-# после debug_dump() (см. меню главной страницы nostroy.ru).
-REESTR_BASE = "https://reestr.nostroy.ru"
-SEARCH_URL = REESTR_BASE + "/api/reestr/search"  # ДОГАДКА
+API_BASE = "https://reestr.nostroy.ru/api/"
+ENDPOINT_MEMBER_LIST_ALL = "sro/all/member/list"
 
 HEADERS = {
     "User-Agent": (
@@ -37,43 +48,68 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
     ),
     "Accept-Language": "ru-RU,ru;q=0.9",
+    "Content-Type": "application/json",
 }
 
 
-def build_url(region: str, page: int) -> str:
-    params = {"region": region, "page": page}
-    return SEARCH_URL + "?" + urlencode(params, encoding="utf-8")
-
-
-def fetch(url: str, timeout: int = 30, proxy: str | None = None) -> str:
+def api_post(endpoint: str, payload: dict, timeout: int = 30, proxy: str | None = None) -> dict:
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    r = requests.get(url, headers=HEADERS, timeout=timeout, proxies=proxies)
+    r = requests.post(API_BASE + endpoint, json=payload, headers=HEADERS, timeout=timeout, proxies=proxies)
     r.raise_for_status()
-    return r.text
+    return r.json()
 
 
-def _txt(node) -> str:
-    return node.get_text(" ", strip=True) if node else ""
+def _get(d: dict, *keys, default=""):
+    for k in keys:
+        v = d.get(k)
+        if v not in (None, ""):
+            return v
+    return default
 
 
-def parse_cards(html: str) -> list[dict]:
-    """ЗАГЛУШКА до калибровки — правь селекторы после debug_dump()."""
-    soup = BeautifulSoup(html, "lxml")
-    results: list[dict] = []
-    # TODO: настоящие селекторы карточек компании — заполнить после
-    # калибровки по debug_nostroy_*.html.
+def parse_cards(data: dict) -> list[dict]:
+    """Разбирает JSON-ответ sro/all/member/list в список карточек-лидов.
+
+    Точная форма ответа ещё не проверена на реальных данных — правь при
+    необходимости после первого живого запроса (см. debug_dump()).
+    """
+    items = data.get("data") or data.get("items") or data.get("list") or []
+    if isinstance(data, list):
+        items = data
+    results = []
+    for item in items:
+        company_name = _get(item, "full_description", "fullDescription", "name")
+        if not company_name:
+            continue
+        results.append(
+            {
+                "company_name": company_name,
+                "inn": _get(item, "inn"),
+                "ogrn": _get(item, "ogrnip", "ogrn"),
+                "sro_name": _get(item, "sro_full_description", "sroFullDescription"),
+                "region": _get(item, "region_number", "regionNumber", "region"),
+                "status_sro": _get(item, "member_status", "memberStatus"),
+                "admission_date": _get(item, "registry_registration_date", "registryRegistrationDate"),
+                "director": _get(item, "director"),
+                "address": _get(item, "place", "address"),
+                "link": "",
+            }
+        )
     return results
 
 
-def search(region: str, pages: int, pause: float = 1.0, proxy: str | None = None) -> list[dict]:
+def search(pages: int = 1, page_size: int = 50, pause: float = 1.0, proxy: str | None = None) -> list[dict]:
+    """Собирает список членов СРО (по всем СРО сразу). Фильтр по региону
+    пока не применяется — см. докстринг модуля."""
     out = []
     for page in range(1, pages + 1):
+        payload = {"filters": {}, "page": page, "pageCount": page_size, "sortBy": {}, "searchString": ""}
         try:
-            html = fetch(build_url(region, page), proxy=proxy)
+            data = api_post(ENDPOINT_MEMBER_LIST_ALL, payload, proxy=proxy)
         except Exception as e:  # noqa: BLE001
-            print(f"    [!] ошибка загрузки НОСТРОЙ ({region}, стр.{page}): {e}")
+            print(f"    [!] ошибка загрузки НОСТРОЙ (стр.{page}): {e}")
             break
-        cards = parse_cards(html)
+        cards = parse_cards(data)
         out.extend(cards)
         if not cards:
             break
@@ -81,72 +117,19 @@ def search(region: str, pages: int, pause: float = 1.0, proxy: str | None = None
     return out
 
 
-def debug_dump(
-    path_main_home: str = "debug_nostroy_main_home.html",
-    path_reestr_home: str = "debug_nostroy_reestr_home.html",
-    path_search: str = "debug_nostroy_search.html",
-    path_js_bundle: str = "debug_nostroy_app_js.txt",
-    region: str = "Санкт-Петербург",
-    proxy: str | None = None,
-):
-    """Снимает HTML главной nostroy.ru, главной reestr.nostroy.ru,
-    угаданного поиска и JS-бандла (SPA — данные грузятся через API,
-    реальный адрес API часто виден прямо в коде фронтенда) — для
-    калибровки."""
+def debug_dump(path_response: str = "debug_nostroy_api_response.json", proxy: str | None = None):
+    """Делает реальный POST-запрос к sro/all/member/list и сохраняет
+    сырой JSON-ответ — для калибровки parse_cards()."""
+    import json
+
+    payload = {"filters": {}, "page": 1, "pageCount": 5, "sortBy": {}, "searchString": ""}
     try:
-        main_html = fetch(MAIN_BASE + "/", proxy=proxy)
-        with open(path_main_home, "w", encoding="utf-8") as f:
-            f.write(main_html)
-        print(f"Сохранил {path_main_home} ({len(main_html)} символов).")
+        data = api_post(ENDPOINT_MEMBER_LIST_ALL, payload, proxy=proxy)
+        with open(path_response, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"Сохранил {path_response}. Найдено карточек: {len(parse_cards(data))}")
     except Exception as e:  # noqa: BLE001
-        print(f"    [!] главная nostroy.ru не открылась: {e}")
-
-    reestr_html = ""
-    try:
-        reestr_html = fetch(REESTR_BASE + "/", proxy=proxy)
-        with open(path_reestr_home, "w", encoding="utf-8") as f:
-            f.write(reestr_html)
-        print(f"Сохранил {path_reestr_home} ({len(reestr_html)} символов).")
-    except Exception as e:  # noqa: BLE001
-        print(f"    [!] главная reestr.nostroy.ru не открылась: {e}")
-
-    try:
-        search_html = fetch(build_url(region, 1), proxy=proxy)
-        with open(path_search, "w", encoding="utf-8") as f:
-            f.write(search_html)
-        print(f"Сохранил {path_search} ({len(search_html)} символов).")
-    except Exception as e:  # noqa: BLE001
-        print(f"    [!] поиск по угаданному URL не сработал: {e}")
-
-    # SPA (Vue, webpack) — app.*.js это только загрузчик чанков, реальный
-    # код (роуты, axios/API) лежит в отдельных chunk-*.js/chunk-vendors*.js.
-    # Тянем ВСЕ js, на которые есть ссылка в HTML (prefetch/preload/src),
-    # и сохраняем каждый отдельным файлом — адрес API должен быть в одном
-    # из них текстом (baseURL/axios.create/строка вида "/api/...").
-    soup = BeautifulSoup(reestr_html, "lxml") if reestr_html else None
-    js_urls: list[str] = []
-    if soup:
-        for tag in soup.select("script[src], link[href]"):
-            src = tag.get("src") or tag.get("href") or ""
-            if src.endswith(".js"):
-                js_urls.append(urljoin(REESTR_BASE, src))
-    js_urls = sorted(set(js_urls))
-
-    combined = []
-    for url in js_urls:
-        name = url.rstrip("/").rsplit("/", 1)[-1]
-        try:
-            js_text = fetch(url, proxy=proxy)
-            combined.append(f"===== {url} =====\n{js_text}\n")
-            print(f"    скачал {name} ({len(js_text)} символов)")
-        except Exception as e:  # noqa: BLE001
-            print(f"    [!] {name} не скачался: {e}")
-    if combined:
-        with open(path_js_bundle, "w", encoding="utf-8") as f:
-            f.write("\n".join(combined))
-        print(f"Сохранил {path_js_bundle} — {len(js_urls)} JS-файлов, всего {sum(len(c) for c in combined)} символов")
-    else:
-        print("    [!] не нашёл ни одной ссылки на .js в HTML reestr.nostroy.ru")
+        print(f"    [!] запрос к API не сработал: {e}")
 
 
 if __name__ == "__main__":
