@@ -8,6 +8,14 @@
 изначально с zakupki.py/b2b_center.py/fabrikant.py). debug_dump()
 снимает HTML главной страницы и попытки поиска по угаданному URL —
 по нему нужно поправить build_url()/parse_cards() (см. debug-dump.yml).
+
+Калибровка 2026-07-13, первая попытка (без прокси, с GitHub Actions IP):
+даже главная страница не открылась — "Connection reset by peer" сразу
+на TCP-уровне. Это похоже на блокировку по IP (как изначально было с
+zakupki.gov.ru), а не на защиту от ботов на уровне заголовков — сайт
+рвёт соединение до ответа, а не отдаёт капчу/403. Следующая попытка —
+с ERZ_RTS_PROXY (тот же российский резидентский прокси, что уже
+работает для zakupki.gov.ru/hh.ru).
 """
 
 import time
@@ -24,7 +32,9 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9",
+    "Connection": "keep-alive",
 }
 
 

@@ -21,7 +21,10 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE = "https://erzrf.ru"
-LIST_URL = BASE + "/zastroyshchiki"  # ДОГАДКА — уточнить после debug_dump()
+# Реальный адрес найден в меню главной страницы (debug_erz_home.html,
+# калибровка 2026-07-13): "/zastroyschiki" — без "h" после "s", не так,
+# как логично было бы транслитерировать "застройщики".
+LIST_URL = BASE + "/zastroyschiki"
 
 HEADERS = {
     "User-Agent": (
@@ -75,15 +78,24 @@ def search(region: str, pages: int, pause: float = 1.0, proxy: str | None = None
 
 def debug_dump(
     path_home: str = "debug_erz_home.html",
+    path_list_plain: str = "debug_erz_list_plain.html",
     path_list: str = "debug_erz_list.html",
     region: str = "Санкт-Петербург",
     proxy: str | None = None,
 ):
-    """Снимает HTML главной страницы и угаданного списка — для калибровки."""
+    """Снимает HTML главной, списка без фильтра и списка с фильтром — для калибровки."""
     home_html = fetch(BASE + "/", proxy=proxy)
     with open(path_home, "w", encoding="utf-8") as f:
         f.write(home_html)
     print(f"Сохранил {path_home} ({len(home_html)} символов).")
+
+    try:
+        plain_html = fetch(LIST_URL, proxy=proxy)
+        with open(path_list_plain, "w", encoding="utf-8") as f:
+            f.write(plain_html)
+        print(f"Сохранил {path_list_plain} ({len(plain_html)} символов).")
+    except Exception as e:  # noqa: BLE001
+        print(f"    [!] список без фильтра не сработал: {e}")
 
     try:
         list_html = fetch(build_url(region, 1), proxy=proxy)
