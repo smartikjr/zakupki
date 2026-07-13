@@ -5,10 +5,12 @@ b2b-center.ru из корневого приложения). Выгружает 
 двумя листами — по требованию не смешивать эти два источника ни между
 собой, ни с корневым leads.xlsx.
 
-ВАЖНО: селекторы rts_tender.py/erz.py ещё не откалиброваны по
-реальному HTML (см. их докстринги) — первый прогон почти наверняка
-вернёт 0 строк по обоим источникам, пока не откалибровать через
-debug-dump.yml.
+СТАТУС: erz.py откалиброван по реальному HTML и работает (см. его
+докстринг про известное ограничение — фильтр по региону пока не
+работает, отдаётся топ-рейтинг по всей РФ). rts_tender.py пока не
+работает вовсе — rts-tender.ru рвёт соединение на уровне TCP даже на
+главной странице (см. докстринг rts_tender.py), нужен прокси для
+следующей попытки калибровки.
 
 Конвейер (по каждому источнику независимо):
   1. собираем сырые карточки;
@@ -77,14 +79,15 @@ def collect_rts(cfg: dict, proxy: str | None) -> list[dict]:
 
 
 def collect_erz(cfg: dict, proxy: str | None) -> list[dict]:
-    out: list[dict] = []
-    for region in cfg.get("regions", []):
-        print(f"[>] ЕРЗ.РФ «{region}»")
-        out.extend(erz.search(region, cfg.get("pages_per_region", 2), proxy=proxy))
+    # ЕРЗ.РФ отдаёт фиксированный топ-рейтинг застройщиков за один запрос —
+    # реального рабочего фильтра по региону не нашли (см. докстринг erz.py),
+    # поэтому цикла по cfg["regions"] здесь нет, один запрос на весь прогон.
+    print("[>] ЕРЗ.РФ (топ застройщиков РФ)")
+    out = erz.search(proxy=proxy)
     seen = set()
     uniq = []
     for card in out:
-        key = f"{card.get('developer','')}|{card.get('project','')}"
+        key = card.get("developer", "")
         if key in seen:
             continue
         seen.add(key)
@@ -130,8 +133,8 @@ def main() -> None:
             r.update(dadata_enrich(r.get("developer", ""), token))
             time.sleep(0.15)
     erz_existing = export.load_existing(out, export.ERZ_SHEET, export.ERZ_COLUMNS)
-    erz_existing_keys = {f"{r.get('developer','')}|{r.get('project','')}" for r in erz_existing}
-    erz_new = [r for r in erz_rows if f"{r.get('developer','')}|{r.get('project','')}" not in erz_existing_keys]
+    erz_existing_keys = {r.get("developer", "") for r in erz_existing}
+    erz_new = [r for r in erz_rows if r.get("developer", "") not in erz_existing_keys]
     print(f"[=] ЕРЗ.РФ уже было: {len(erz_rows) - len(erz_new)}, новых: {len(erz_new)}")
     erz_combined = erz_existing + erz_new
 
