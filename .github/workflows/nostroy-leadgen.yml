@@ -50,7 +50,7 @@ jobs:
           name: nostroy-leads
           path: |
             nostroy-leadgen/nostroy.xlsx
-            nostroy-leadgen/debug_*.html
+            nostroy-leadgen/debug_nostroy_*
           if-no-files-found: warn
 
       - name: Закоммитить результат (Excel + debug-HTML)
@@ -58,7 +58,7 @@ jobs:
           git config user.name "leadgen-bot"
           git config user.email "bot@users.noreply.github.com"
           git add nostroy.xlsx || true
-          git add -f debug_*.html || true
+          git add -f debug_nostroy_* || true
           git commit -m "nostroy: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений"
           for i in 1 2 3 4 5; do
             if git push; then
@@ -69,7 +69,7 @@ jobs:
             git fetch origin "$GITHUB_REF_NAME"
             git reset --soft "origin/$GITHUB_REF_NAME"
             git add nostroy.xlsx || true
-            git add -f debug_*.html || true
+            git add -f debug_nostroy_* || true
             git commit -m "nostroy: обновление $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "нет изменений для коммита"
             sleep $((i * 3))
           done

@@ -85,11 +85,14 @@ def debug_dump(
     path_main_home: str = "debug_nostroy_main_home.html",
     path_reestr_home: str = "debug_nostroy_reestr_home.html",
     path_search: str = "debug_nostroy_search.html",
+    path_js_bundle: str = "debug_nostroy_app_js.txt",
     region: str = "Санкт-Петербург",
     proxy: str | None = None,
 ):
-    """Снимает HTML главной nostroy.ru, главной reestr.nostroy.ru и
-    угаданного поиска — для калибровки."""
+    """Снимает HTML главной nostroy.ru, главной reestr.nostroy.ru,
+    угаданного поиска и JS-бандла (SPA — данные грузятся через API,
+    реальный адрес API часто виден прямо в коде фронтенда) — для
+    калибровки."""
     try:
         main_html = fetch(MAIN_BASE + "/", proxy=proxy)
         with open(path_main_home, "w", encoding="utf-8") as f:
@@ -98,6 +101,7 @@ def debug_dump(
     except Exception as e:  # noqa: BLE001
         print(f"    [!] главная nostroy.ru не открылась: {e}")
 
+    reestr_html = ""
     try:
         reestr_html = fetch(REESTR_BASE + "/", proxy=proxy)
         with open(path_reestr_home, "w", encoding="utf-8") as f:
@@ -113,6 +117,27 @@ def debug_dump(
         print(f"Сохранил {path_search} ({len(search_html)} символов).")
     except Exception as e:  # noqa: BLE001
         print(f"    [!] поиск по угаданному URL не сработал: {e}")
+
+    # SPA (Vue) — реального контента в HTML нет, но адрес backend-API
+    # часто виден прямо в коде фронтенда (baseURL/axios/fetch).
+    soup = BeautifulSoup(reestr_html, "lxml") if reestr_html else None
+    js_src = None
+    if soup:
+        for script in soup.select("script[src]"):
+            src = script["src"]
+            if "app." in src and src.endswith(".js"):
+                js_src = urljoin(REESTR_BASE, src)
+                break
+    if js_src:
+        try:
+            js_text = fetch(js_src, proxy=proxy)
+            with open(path_js_bundle, "w", encoding="utf-8") as f:
+                f.write(js_text)
+            print(f"Сохранил {path_js_bundle} ({len(js_text)} символов) — {js_src}")
+        except Exception as e:  # noqa: BLE001
+            print(f"    [!] JS-бандл не скачался: {e}")
+    else:
+        print("    [!] не нашёл ссылку на app.*.js в HTML reestr.nostroy.ru")
 
 
 if __name__ == "__main__":
