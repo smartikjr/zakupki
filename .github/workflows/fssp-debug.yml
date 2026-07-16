@@ -21,7 +21,7 @@ jobs:
 
       - run: pip install requests
 
-      - name: Снять debug-HTML страницы поиска ФССП
+      - name: Снять debug-HTML страницы поиска и тестовый запрос по ИНН
         env:
           FSSP_PROXY: ${{ secrets.FSSP_PROXY }}
         run: |
@@ -33,14 +33,18 @@ jobs:
               fssp.debug_dump(proxy=proxy)
           except Exception as e:
               print(f'[!] fssp debug_dump: {e}')
+          try:
+              fssp.debug_dump_search(proxy=proxy)
+          except Exception as e:
+              print(f'[!] fssp debug_dump_search: {e}')
           "
 
-      - name: Закоммитить debug-HTML
+      - name: Закоммитить debug-файлы
         run: |
           git config user.name "leadgen-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add -f debug_fssp_*.html || true
-          git commit -m "fssp: debug-HTML для проверки капчи" || echo "нет изменений"
+          git add -f debug_fssp_* || true
+          git commit -m "fssp: debug-файлы для проверки капчи и формата ответа" || echo "нет изменений"
           for i in 1 2 3 4 5; do
             if git push; then
               echo "пуш прошёл (попытка $i)"
@@ -48,8 +52,8 @@ jobs:
             fi
             git fetch origin "$GITHUB_REF_NAME"
             git reset --soft "origin/$GITHUB_REF_NAME"
-            git add -f debug_fssp_*.html || true
-            git commit -m "fssp: debug-HTML для проверки капчи" || echo "нет изменений для коммита"
+            git add -f debug_fssp_* || true
+            git commit -m "fssp: debug-файлы для проверки капчи и формата ответа" || echo "нет изменений для коммита"
             sleep $((i * 3))
           done
           echo "::warning::не удалось запушить результат после нескольких попыток"
