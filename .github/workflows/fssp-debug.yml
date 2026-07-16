@@ -1,0 +1,55 @@
+name: Проверка ФССП (калибровка)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fssp-debug:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: debt-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests
+
+      - name: Снять debug-HTML страницы поиска ФССП
+        env:
+          FSSP_PROXY: ${{ secrets.FSSP_PROXY }}
+        run: |
+          python -c "
+          import os
+          import fssp
+          proxy = os.environ.get('FSSP_PROXY') or None
+          try:
+              fssp.debug_dump(proxy=proxy)
+          except Exception as e:
+              print(f'[!] fssp debug_dump: {e}')
+          "
+
+      - name: Закоммитить debug-HTML
+        run: |
+          git config user.name "leadgen-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -f debug_fssp_*.html || true
+          git commit -m "fssp: debug-HTML для проверки капчи" || echo "нет изменений"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "пуш прошёл (попытка $i)"
+              exit 0
+            fi
+            git fetch origin "$GITHUB_REF_NAME"
+            git reset --soft "origin/$GITHUB_REF_NAME"
+            git add -f debug_fssp_*.html || true
+            git commit -m "fssp: debug-HTML для проверки капчи" || echo "нет изменений для коммита"
+            sleep $((i * 3))
+          done
+          echo "::warning::не удалось запушить результат после нескольких попыток"
